@@ -1,2 +1,2 @@
 # Object-Occlusion
-Experiments on occluding peoplefrom video scenes
+Experiments on occluding people from video scenes
