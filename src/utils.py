@@ -5,7 +5,7 @@ def welford_next(arr:np.ndarray, new_point:np.float32) -> np.ndarray:
     Implementation of the Welford's online update algorithm.
     
     Parameters:
-    arr: Numpy Array containing 4 values: [previous mean, previous standard deviation, previous s, number of points before current]
+    arr: Numpy array containing 4 values: [previous mean, previous standard deviation, previous s, number of points before current]
     new_point: Float value denoting the new point which is to be used to calculate new mean, standard deviation and s
 
     Return:
@@ -22,16 +22,17 @@ def welford_next(arr:np.ndarray, new_point:np.float32) -> np.ndarray:
 
 def welford(history:np.ndarray, frame:np.ndarray) -> np.ndarray:
     '''
-    This implementation of Welford Algorithm takes past image data in a history array, and a new frame
+    This implementation of Welford's Algorithm takes past image data in a history array, and a new frame
     from a video sequence to compute an updated history array based on the values from the frame.
 
     Parameters:
     history: Numpy array of shape [h, w, c, x] 
-             where x = [old mean, old std, old s, number of frames encountered before]
+             where x = [old mean, old std, old s, number of frames encountered before current]
     frame: Numpy array of shape [h, w, c]
 
     Return:
-    Numpy array of shape [h, w, c, x] containing updated mean, std, s and num_points values
+    Numpy array of shape [h, w, c, x]
+             where x = [new mean, new std, new s, number of frames encountered including current]
     '''
 
     old_mean, _, old_s, num_points = np.transpose(history, [3,0,1,2])
