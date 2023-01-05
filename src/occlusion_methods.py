@@ -9,7 +9,9 @@ from numpy import random
 import numpy as np
 import torch.nn as nn
 
-def occlude_welford(history_array:numpy.ndarray, image:numpy.ndarray, background_img:numpy.ndarray, erode_dilate:bool=False) -> dict:
+from occlude_utils import welford, welford_next
+
+def occlude_welford(history_array:np.ndarray, image:np.ndarray, background_img:np.ndarray, erode_dilate:bool=False) -> dict:
     '''
     Occludes objects in an image using historical distribution of each pixel updated online using Welford's method
 
@@ -73,7 +75,7 @@ def occlude_welford(history_array:numpy.ndarray, image:numpy.ndarray, background
 
     return {'history': history_array, 'mask': mask, 'background image': background_img, 'final mask': mask_out}
 
-def occlude_pixel_history(timeout:int, history_array:numpy.ndarray, image:numpy.ndarray, background_img:numpy.ndarray) -> dict:
+def occlude_pixel_history(timeout:int, history_array:np.ndarray, image:np.ndarray, background_img:np.ndarray) -> dict:
     '''
     Occludes objects in an image using the historical distribution (max 200 (latest) encountered values) of each pixel
 
