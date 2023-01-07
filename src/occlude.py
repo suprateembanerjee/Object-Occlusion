@@ -1,5 +1,5 @@
-from occlusion_methods import occlude_welford, occlude_pixel_history
-from yolo_utils import YoloPredictor
+# Project: Object Occlusion (2023)
+# Author: Suprateem Banerjee (Github: @suprateembanerjee)
 
 import numpy as np
 import cv2
@@ -8,6 +8,9 @@ import time
 import glob
 import re
 
+from occlusion_methods import occlude_welford, occlude_pixel_history
+from yolo_utils import YoloPredictor
+
 def occlude(source:str):
 
 	view_img = True 
@@ -15,22 +18,21 @@ def occlude(source:str):
 	vid_path = None
 	save_separate = True
 
-	# Output path specifications
+	# Output save_path specifications
 
-	path = Path('runs/detect/exp')
+	save_path = Path('runs/occlude/exp')
+	PATH_TO_YOLO = '/Users/suprateembanerjee/Python Projects/Teleport/Occlude/YOLO/yolov7-main'
 
-	if not path.exists():
-		save_dir = path #Path(str(path))
+	if not save_path.exists():
+		save_dir = save_path #Path(str(save_path))
 	else:
-		dirs = glob.glob(f'{path}*')
-		matches = [re.search(rf'%s(\d+)' % path.stem, d) for d in dirs]
+		dirs = glob.glob(f'{save_path}*')
+		matches = [re.search(rf'%s(\d+)' % save_path.stem, d) for d in dirs]
 		i = [int(m.groups()[0]) for m in matches if m]
 		n = max(i) + 1 if i else 2
-		save_dir = Path(f'{path}{n}')  
+		save_dir = Path(f'{save_path}{n}')  
 
 	(save_dir / 'labels').mkdir(parents=True, exist_ok=True)
-
-
 
 	cap = cv2.VideoCapture(source)
 	background_img = None
@@ -42,10 +44,12 @@ def occlude(source:str):
 	occlusion_mechanism = ['yolo',
 							'per pixel history 200',
 							'welford',
-							'welford + erode + dilate'][0]
+							'welford + erode + dilate'][0] 
 
 	if occlusion_mechanism == 'yolo':
-		predictor = YoloPredictor()
+		predictor = YoloPredictor(path_to_yolo=PATH_TO_YOLO, weights='yolov7.pt')
+
+	t0 = time.time()
 	
 	while cap.isOpened():
 
@@ -68,7 +72,10 @@ def occlude(source:str):
 
 			display_windows = ['original', 'detection', 'background_img', 'background_update']
 
-			det, img, mask = predictor.predict(frame)
+			det, img, timestamps = predictor.predict(frame)
+			t1 = timestamps['t1']
+			t2 = timestamps['t2']
+			t3 = timestamps['t3']
 			occlude_out = predictor.occlude_yolo(det, s, img, frame, mask)
 			s, mask_out, background_img, background_update = occlude_out.values()
 
@@ -77,7 +84,12 @@ def occlude(source:str):
 			display_windows = ['original', 'mask', 'background_img']
 
 			occlude_out = occlude_pixel_history(timeout, history_array, image, background_img)
-			history_array, mask_out, background_img = occlude_out.values()
+			history_array, mask_out, background_img, timestamps = occlude_out.values()
+			t4 = timestamps['t4']
+			t5 = timestamps['t5']
+			t6 = timestamps['t6']
+			t7 = timestamps['t7']
+			t8 = timestamps['t8']
 			timeout -= 1
 
 		elif occlusion_mechanism == 'welford':
@@ -85,14 +97,24 @@ def occlude(source:str):
 			display_windows = ['original', 'mask', 'background_img']
 
 			occlude_out = occlude_welford(history_array, image, background_img)
-			history_array, mask_out, background_img, _ = occlude_out.values()
+			history_array, mask_out, background_img, _, timestamps = occlude_out.values()
+			t4 = timestamps['t4']
+			t5 = timestamps['t5']
+			t6 = timestamps['t6']
+			t7 = timestamps['t7']
+			t8 = timestamps['t8']
 
 		elif occlusion_mechanism == 'welford + erode + dilate':
 
 			display_windows = ['original', 'mask', 'background_img', 'eroded+dilated mask']
 
 			occlude_out = occlude_welford(history_array, image, background_img, erode_dilate=True)
-			history_array, mask_out, background_img, eroded_dilated = occlude_out.values()
+			history_array, mask_out, background_img, eroded_dilated, timestamps = occlude_out.values()
+			t4 = timestamps['t4']
+			t5 = timestamps['t5']
+			t6 = timestamps['t6']
+			t7 = timestamps['t7']
+			t8 = timestamps['t8']
 
 		t9 = time.time()
 
@@ -138,8 +160,6 @@ def occlude(source:str):
 		# Save results (image with detections)
 		if vid_path != save_path:  # new video
 			vid_path = save_path
-			# if isinstance(vid_writer, cv2.VideoWriter):
-			# 	vid_writer.release()  # release previous video writer
 			vid_cap = cap
 			if vid_cap:  # video
 				fps = vid_cap.get(cv2.CAP_PROP_FPS)
@@ -191,10 +211,6 @@ def occlude(source:str):
 			if 'eroded+dilated mask' in display_windows:
 				# print(f'eroded_dilated: {type(eroded_dilated)} {type(eroded_dilated[0][0])} {eroded_dilated.shape}')
 				vid_writer5.write(eroded_dilated)
-
-	# if save_txt or save_img:
-	# 	s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
-	# 	#print(f"Results saved to {save_dir}{s}")
 
 	print(f'Done. ({time.time() - t0:.3f}s)')
 

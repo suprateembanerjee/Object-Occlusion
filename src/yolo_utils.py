@@ -1,3 +1,6 @@
+# Project: Object Occlusion (2023)
+# Author: Suprateem Banerjee (Github: @suprateembanerjee)
+
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -5,16 +8,12 @@ from numpy import random
 import numpy as np
 import torch.nn as nn
 import time
-
-from utils.datasets import LoadStreams, LoadImages, letterbox
-from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
-	scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
-from utils.plots import plot_one_box
-from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
+import sys
 
 def update_compatibility(model) -> None:
     '''
-    Updates compatibility of YOLO model for different torch versions
+    Updates compatibility of YOLO model for different torch versions.
+    Identical to similar mechanism used in official YOLOv7 repository.
     '''
 
     for m in model.modules():
@@ -25,13 +24,18 @@ def update_compatibility(model) -> None:
 
 class YoloPredictor:
 	'''
-	This class was built to use my occlusion mechanism with YOLO while maintaining code separation.
-	This file can reside inside the main folder of YOLOv7, and use the detection, while the other occlusion methods stay separate
-	and can make objects of YoloPredictor and use it to infer predictions
+	This class was built to enable YOLO predictions on an image in a simple manner.
+
+	Usage:
+	1. Download YOLOv7 code from official github repo, store it in some {PATH_TO_YOLO}
+	2. Download YOLOv7 weights (there are several versions) from official github repo, name it {WEIGHTS}
+	3. Initialize predictor [predictor = YoloPredictor({PATH_TO_YOLO},{WEIGHTS})]
+	4. Predict [predictor.predict(image)]
 	'''
 
 	def __init__(self,
-				weights:str = 'yolov7.pt',
+				path_to_yolo:str,
+				weights:str = 'yolov7.pt', 
 				view_img:bool = True,
 				save_txt:bool = True,
 				imgsz:int = 640,
@@ -50,7 +54,20 @@ class YoloPredictor:
 				classify:bool = False,
 				save_separate:bool = True):
 
-		self.weights = weights
+		sys.path.insert(0, path_to_yolo)
+
+		from utils.datasets import letterbox
+		from utils.general import check_img_size, non_max_suppression, apply_classifier, scale_coords, set_logging
+		from utils.plots import plot_one_box
+		from utils.torch_utils import select_device, load_classifier, TracedModel
+
+		self.letterbox = letterbox
+		self.non_max_suppression = non_max_suppression
+		self.apply_classifier = apply_classifier
+		self.scale_coords = scale_coords
+		self.plot_one_box = plot_one_box
+
+		self.weights = f'{path_to_yolo}/{weights}'
 		self.view_img = view_img
 		self.save_txt = save_txt
 		self.imgsz = imgsz
@@ -71,17 +88,13 @@ class YoloPredictor:
 
 		# self.webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
 
-		# Directories
-		# self.save_dir = Path(increment_path(Path(project) / name, exist_ok=exist_ok))  # increment run
-		# (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
-
 		# Initialize
 		set_logging()
 		self.device = select_device(self.device)
 		self.half = self.device.type != 'cpu'  # half precision only supported on CUDA
 
 		# Load model
-		self.model = torch.load(weights, map_location=device)['model'].float().fuse().eval()
+		self.model = torch.load(self.weights, map_location=self.device)['model'].float().fuse().eval()
 		update_compatibility(self.model)
 		self.stride = int(self.model.stride.max())  # model stride
 		self.imgsz = check_img_size(self.imgsz, s=self.stride)  # check img_size
@@ -101,13 +114,6 @@ class YoloPredictor:
 		self.vid_path = None
 		self.vid_writer = None
 
-		# if self.webcam:
-		#     self.view_img = check_imshow()
-		#     self.cudnn.benchmark = True  # set True to speed up constant image size inference
-		#     self.dataset = LoadStreams(self.source, img_size=self.imgsz, stride=self.stride)
-		# else:
-		#     self.dataset = LoadImages(self.source, img_size=self.imgsz, stride=self.stride)
-
 		# Get names and colors
 		self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
 		self.colors = [[random.randint(0, 255) for _ in range(3)] for _ in self.names]
@@ -120,12 +126,22 @@ class YoloPredictor:
 
 		self.background_img = None
 		self.age_array = None
-		# self.history_array = None
-		# self.timeout = 30
 
-	def predict(self, frame, img_size=640, stride=32):
+	def predict(self, frame:np.ndarray, img_size:int=640, stride:int=32) -> tuple:
+		'''
+	    Uses YOLO to detect objects in an image.
+	    
+	    Parameters:
+	    frame: A video frame of shape (h, w, c)
+	    img_size: Size of the image on which to perform detection
+	    stride: Stride to be used by YOLO for detections
+	    
+	    Return:
+	    Tuple containing detections, reshaped image, and timestamps
+	    '''
 
-		img = letterbox(frame.copy(), img_size, stride=stride)[0]
+
+		img = self.letterbox(frame.copy(), img_size, stride=stride)[0]
 
 		# Convert
 		img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
@@ -145,13 +161,6 @@ class YoloPredictor:
 
 		t1 = t2 = t3 = t4 = t5 = t6 = t7 = t8 = time.time()
 
-		# p = Path(p)  # to Path
-		# save_path = str(save_dir / p.name)  # img.jpg
-		# txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-		
-		mask = np.ones_like(self.age_array)
-		image = frame.copy()
-
 		# Inference
 		t1 = time.time()
 		with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
@@ -159,17 +168,19 @@ class YoloPredictor:
 		t2 = time.time()
 
 		# # Apply NMS
-		pred = non_max_suppression(pred, self.conf_thres, self.iou_thres, classes=self.classes, agnostic=self.agnostic_nms)
+		pred = self.non_max_suppression(pred, self.conf_thres, self.iou_thres, classes=self.classes, agnostic=self.agnostic_nms)
 		t3 = time.time()
 
 		# Apply Classifier
 		if self.classify:
-			pred = apply_classifier(pred, modelc, img, frame)
+			pred = self.apply_classifier(pred, modelc, img, frame)
 
 		# Process detections
 		det = pred[0]
 
-		return det, img, mask
+		timestamps = {'t1':t1, 't2':t2, 't3':t3}
+
+		return det, img, timestamps
 
 	def occlude_yolo(self, det, s, img, frame, mask) -> dict:
 	    '''
@@ -197,7 +208,7 @@ class YoloPredictor:
 
 	    if len(det):
 	        # Rescale boxes from img_size to frame size
-	        det[:, :4] = scale_coords(img.shape[2:], det[:, :4], frame.shape).round()
+	        det[:, :4] = self.scale_coords(img.shape[2:], det[:, :4], frame.shape).round()
 
 	        gn = torch.tensor(frame.shape)[[1, 0, 1, 0]]  # normalization gain whwh
 
@@ -209,15 +220,9 @@ class YoloPredictor:
 	        # Write results
 	        for x1, y1, x2, y2, conf, cls in det:
 
-	            # if save_txt:  # Write to file
-	            #     xywh = (xyxy2xywh(torch.tensor((x1, y1, x2, y2)).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-	            #     line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-	            #     with open(txt_path + '.txt', 'a') as f:
-	            #         f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
 	            if self.save_img or self.view_img:  # Add bbox to image
 	                label = f'{self.names[int(cls)]} {conf:.2f}'
-	                plot_one_box((x1, y1, x2, y2), frame, label=label, color=self.colors[int(cls)], line_thickness=1)
+	                self.plot_one_box((x1, y1, x2, y2), frame, label=label, color=self.colors[int(cls)], line_thickness=1)
 
 	            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
 	            margin = 10
@@ -227,7 +232,7 @@ class YoloPredictor:
 	                mask[max(0, y1 - margin) : min(frame.shape[0], y2 + margin), max(0, x1 - margin) : min(frame.shape[1], x2 + margin)] = 0.
 
 	                label = f'{self.names[int(cls)]} {conf:.2f}'
-	                plot_one_box((x1, y1, x2, y2), frame, label=label, color=self.colors[int(cls)], line_thickness=1)
+	                self.plot_one_box((x1, y1, x2, y2), frame, label=label, color=self.colors[int(cls)], line_thickness=1)
 	            
 	            else:
 	                # Associate objects with people
@@ -243,4 +248,3 @@ class YoloPredictor:
 	    mask_out = cv2.cvtColor(mask_out, cv2.COLOR_GRAY2BGR)
 
 	    return {'string': s, 'mask': mask_out, 'background image': self.background_img, 'background update': background_update}
-				

@@ -1,7 +1,9 @@
+# Project: Object Occlusion (2023)
+# Author: Suprateem Banerjee (Github: @suprateembanerjee)
+
 import argparse
 import time
 from pathlib import Path
-
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -11,7 +13,7 @@ import torch.nn as nn
 
 from occlude_utils import welford, welford_next
 
-def occlude_welford(history_array:np.ndarray, image:np.ndarray, background_img:np.ndarray, erode_dilate:bool=False) -> dict:
+def occlude_welford(history_array:np.ndarray, image:np.ndarray, background_img:np.ndarray, erode_dilate:bool=False, simple_mean:bool=False) -> dict:
     '''
     Occludes objects in an image using historical distribution of each pixel updated online using Welford's method
 
@@ -29,51 +31,60 @@ def occlude_welford(history_array:np.ndarray, image:np.ndarray, background_img:n
     if type(history_array) == type(None):
         history_array = np.full(shape=image.shape + (4,), fill_value=0.001, dtype=np.float32) # [mean, std, s, numpoints]
 
-    t4 = time.time()
+    t4 = t5 = t6 = t7 = t8 = time.time()
 
     print(history_array.shape)
     t5 = time.time()
 
     new_history = welford(history_array.copy(), image)
 
-    num_std_diff = np.abs(new_history[:,:,:,0] - image) / new_history[:,:,:,1]
-    t6 = time.time()
-    mask = np.array(np.mean(num_std_diff, axis=2) < 3., dtype=np.float32)
-    t7 = time.time()
-    mask_out = mask.copy()
+    if simple_mean == True:
+        background_img = new_history[:,:,:,0]
+        history_array = new_history
+        mask = mask_out = np.zeros(image.shape[:-1])
 
-    if erode_dilate:
-        ed_shape = cv2.MORPH_ELLIPSE
+    else:
 
-        erosion_size = 1
-        element = cv2.getStructuringElement(ed_shape, (2 * erosion_size + 1, 2 * erosion_size + 1),
-                               (erosion_size, erosion_size))
+        num_std_diff = np.abs(new_history[:,:,:,0] - image) / new_history[:,:,:,1]
+        t6 = time.time()
+        mask = np.array(np.mean(num_std_diff, axis=2) < 3., dtype=np.float32)
+        t7 = time.time()
+        mask_out = mask.copy()
 
-        eroded = cv2.erode(mask, element)
+        if erode_dilate:
+            ed_shape = cv2.MORPH_ELLIPSE
 
-        dilation_size = 2
-        element = cv2.getStructuringElement(ed_shape, (2 * dilation_size + 1, 2 * dilation_size + 1),
-                               (dilation_size, dilation_size))
-        eroded_dilated = cv2.dilate(eroded, element)
+            erosion_size = 1
+            element = cv2.getStructuringElement(ed_shape, (2 * erosion_size + 1, 2 * erosion_size + 1),
+                                   (erosion_size, erosion_size))
 
-        erosion_size = 1
-        element = cv2.getStructuringElement(ed_shape, (2 * erosion_size + 1, 2 * erosion_size + 1),
-                               (erosion_size, erosion_size))
+            eroded = cv2.erode(mask, element)
 
-        mask_out = cv2.erode(eroded_dilated, element)
+            dilation_size = 2
+            element = cv2.getStructuringElement(ed_shape, (2 * dilation_size + 1, 2 * dilation_size + 1),
+                                   (dilation_size, dilation_size))
+            eroded_dilated = cv2.dilate(eroded, element)
+
+            erosion_size = 1
+            element = cv2.getStructuringElement(ed_shape, (2 * erosion_size + 1, 2 * erosion_size + 1),
+                                   (erosion_size, erosion_size))
+
+            mask_out = cv2.erode(eroded_dilated, element)
 
 
-    background_img[np.nonzero(mask_out)] = image[np.nonzero(mask_out)]
-    t8 = time.time()
+        background_img[np.nonzero(mask_out)] = image[np.nonzero(mask_out)]
+        t8 = time.time()
 
-    history_array = welford(history_array, background_img)
+        history_array = welford(history_array, background_img)
 
     mask = cv2.normalize(mask, None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
     mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
     mask_out = cv2.normalize(mask_out, None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
     mask_out = cv2.cvtColor(mask_out, cv2.COLOR_GRAY2BGR)
 
-    return {'history': history_array, 'mask': mask, 'background image': background_img, 'final mask': mask_out}
+    timestamps = {'t4':t4, 't5':t5, 't6':t6, 't7':t7, 't8':t8}
+
+    return {'history': history_array, 'mask': mask, 'background image': background_img, 'final mask': mask_out, 'timestamps': timestamps}
 
 def occlude_pixel_history(timeout:int, history_array:np.ndarray, image:np.ndarray, background_img:np.ndarray) -> dict:
     '''
@@ -93,7 +104,7 @@ def occlude_pixel_history(timeout:int, history_array:np.ndarray, image:np.ndarra
     if type(history_array) == type(None):
         history_array = np.full(shape=image.shape + (1,), fill_value=0.001, dtype=np.float32)
 
-    t4 = time.time()
+    t4 = t5 = t6 = t7 = t8 = time.time()
 
     image_reshaped = image.reshape(image.shape + (1,))
     valid_bg = image_reshaped.copy()
@@ -114,5 +125,6 @@ def occlude_pixel_history(timeout:int, history_array:np.ndarray, image:np.ndarra
 
     history_array = np.append(history_array[:,:,:,int(history_array.shape[3] / 200):], valid_bg, axis=3)
     timeout -= 1
+    timestamps = {'t4':t4, 't5':t5, 't6':t6, 't7':t7, 't8':t8}
 
-    return {'history': history_array, 'mask': mask_out, 'background image': background_img}
+    return {'history': history_array, 'mask': mask_out, 'background image': background_img, 'timestamps': timestamps}
