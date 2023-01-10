@@ -8,8 +8,8 @@ import time
 import glob
 import re
 
-from occlusion_methods import occlude_welford, occlude_pixel_history
-from yolo_utils import YoloPredictor
+from occlusion_methods import occlude_welford, occlude_pixel_history, occlude_yolo
+from yolopredictor import YoloPredictor
 
 def occlude(source:str):
 
@@ -44,7 +44,7 @@ def occlude(source:str):
 	occlusion_mechanism = ['yolo',
 							'per pixel history 200',
 							'welford',
-							'welford + erode + dilate'][0] 
+							'welford + erode + dilate'][1] 
 
 	if occlusion_mechanism == 'yolo':
 		predictor = YoloPredictor(path_to_yolo=PATH_TO_YOLO, weights='yolov7.pt')
@@ -54,6 +54,7 @@ def occlude(source:str):
 	while cap.isOpened():
 
 		ret, frame = cap.read()
+
 		if ret == False:
 			break
 
@@ -66,7 +67,7 @@ def occlude(source:str):
 		mask = np.ones_like(age_array)
 		image = frame.copy()
 		s = ''
-		save_path = str(save_dir / source)
+		save_path = str(save_dir / source.split('/')[-1])
 
 		if occlusion_mechanism == 'yolo':
 
@@ -76,8 +77,9 @@ def occlude(source:str):
 			t1 = timestamps['t1']
 			t2 = timestamps['t2']
 			t3 = timestamps['t3']
-			occlude_out = predictor.occlude_yolo(det, s, img, frame, mask)
-			s, mask_out, background_img, background_update = occlude_out.values()
+
+			occlude_out = occlude_yolo(det, s, img, predictor.names, predictor.colors, frame, mask, age_array, background_img, predictor.funcs)
+			s, mask_out, background_img, background_update, age_array = occlude_out.values()
 
 		elif occlusion_mechanism == 'per pixel history 200':
 
@@ -191,7 +193,6 @@ def occlude(source:str):
 			compound[:h, w:, :] = image
 			compound[h:, w:, :] = eroded_dilated if 'eroded+dilated mask' in display_windows else background_update
 			compound = cv2.normalize(compound.copy(), None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
-			print(compound.shape)
 			vid_writer.write(compound)
 
 
@@ -217,4 +218,4 @@ def occlude(source:str):
 	cap.release()
 
 if __name__=='__main__':
-	occlude('outdoor.mp4') # 'oslo.mp4' 'outdoor.mp4' 'people.mp4'
+	occlude('res/outdoor.mp4') # 'oslo.mp4' 'outdoor.mp4'

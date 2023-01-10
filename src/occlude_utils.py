@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 
 def welford_next(arr:np.ndarray, new_point:np.float32) -> np.ndarray:
     '''

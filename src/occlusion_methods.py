@@ -1,15 +1,10 @@
 # Project: Object Occlusion (2023)
 # Author: Suprateem Banerjee (Github: @suprateembanerjee)
 
-import argparse
 import time
-from pathlib import Path
 import cv2
 import torch
-import torch.backends.cudnn as cudnn
-from numpy import random
 import numpy as np
-import torch.nn as nn
 
 from occlude_utils import welford, welford_next
 
@@ -111,7 +106,6 @@ def occlude_pixel_history(timeout:int, history_array:np.ndarray, image:np.ndarra
     mask_out = np.ones_like(image)
 
     if timeout < 0:
-        print(f'270: history_array shape: {history_array.shape}')
         t5 = time.time()
         num_std_diff = np.abs(history_array.mean(axis=3) - image) / history_array.std(axis=3) # Expensive
         t6 = time.time()
@@ -128,3 +122,78 @@ def occlude_pixel_history(timeout:int, history_array:np.ndarray, image:np.ndarra
     timestamps = {'t4':t4, 't5':t5, 't6':t6, 't7':t7, 't8':t8}
 
     return {'history': history_array, 'mask': mask_out, 'background image': background_img, 'timestamps': timestamps}
+
+def occlude_yolo(det:torch.Tensor, 
+                  s:str, 
+                  img:torch.Tensor, 
+                  names:list, 
+                  colors:list, 
+                  frame:np.ndarray, 
+                  mask:np.ndarray, 
+                  age_array:np.ndarray, 
+                  background_img:np.ndarray, 
+                  funcs:dict) -> dict:
+    '''
+    Occludes objects in an image using detection via YOLOv7 and masking the detected bounding box using present background
+
+    Parameters:
+    det: Tensor contatining detections by YOLOv7 [torch.float32]
+    s: String for terminal out
+    img: Tensor containing rescaled and reshaped image for YOLOv7 detections [torch.float32]
+    names: List of prediction class names
+    colors: List of prediction class colors
+    frame: present frame from video [np.uint8]
+    mask: present mask for background update [np.float64]
+    age_array: age array denoting number of frames before when an object has not been detected in a pixel [np.float64]
+    background_img: Numpy array of shape [h, w, c] containing the background image as computed till last frame [np.uint8]
+    funcs: YOLOv7 functions which are required for processing
+
+    Return:
+    Dictionary containing string output, mask, updated background image, masked background update, and age array
+    '''
+
+
+    image = frame.copy()
+
+    if len(det):
+        # Rescale boxes from img_size to frame size
+        det[:, :4] = funcs['scale_coords'](img.shape[2:], det[:, :4], frame.shape).round()
+
+        gn = torch.tensor(frame.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+
+        # Print results
+        for c in det[:, -1].unique():
+            n = (det[:, -1] == c).sum()  # detections per class
+            s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+
+        # Write results
+        for x1, y1, x2, y2, conf, cls in det:
+
+            label = f'{names[int(cls)]} {conf:.2f}'
+            funcs['plot_one_box']((x1, y1, x2, y2), frame, label=label, color=colors[int(cls)], line_thickness=1)
+
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            margin = 10
+            
+            # Add bbox to image
+            if names[int(cls)] == 'person':
+                # Reset Age of pixels
+                mask[max(0, y1 - margin) : min(frame.shape[0], y2 + margin), max(0, x1 - margin) : min(frame.shape[1], x2 + margin)] = 0.
+
+                label = f'{names[int(cls)]} {conf:.2f}'
+                funcs['plot_one_box']((x1, y1, x2, y2), frame, label=label, color=colors[int(cls)], line_thickness=1)
+            
+            else:
+                # Associate objects with people
+                if np.any(mask[y1:y2,x1:x2], where=[0.]):
+                    mask[max(0, y1 - margin) : min(frame.shape[0], y2 + margin), max(0, x1 - margin) : min(frame.shape[1], x2 + margin)] = 0.
+
+        age_array *= mask
+        background_update = np.tile((age_array > 20).astype(np.uint8), (3, 1, 1)).transpose(1,2,0) * image
+        mask = np.sum(background_update, axis=2)
+        background_img[np.nonzero(mask)] = background_update[np.nonzero(mask)]
+
+    mask_out = cv2.normalize(mask.copy(), None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
+    mask_out = cv2.cvtColor(mask_out, cv2.COLOR_GRAY2BGR)
+
+    return {'string': s, 'mask': mask_out, 'background image': background_img, 'background update': background_update, 'age array': age_array}
