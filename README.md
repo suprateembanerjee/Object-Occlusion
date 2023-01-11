@@ -1,6 +1,24 @@
 # Object Occlusion
 This project is about occluding people from video scenes. Many of the methods have simply explored background imaging using various techniques. Inferring the background of a scene lets us protect privacy of residents in a video stream from a private property, for instance. In my case, it needed to be operable in real time, so that this stack can run on a live video feed on the cloud before being served to a client.
 
+# How to Run
+
+We access the system from `occlude.py`.
+
+Four parameters need to be specified: 
+* `file`: Name of the input video file, placed under the `res` folder.
+* `occlusion_mechanism`: Method to be used to occlude. 
+* `path to YOLO`: Absolute path to YOLOv7 (parent directory of the [Official GitHub Repo](https://github.com/WongKinYiu/yolov7)), with desired weights downloaded and placed inside it (Eg [yolov7.pt](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7.pt)).
+* `weights` Name of the file containing weights to initialize the model, Eg. 'yolov7.pt'.
+
+These parameters are specified directly inside the `occlude.py` (lines 216:226) instead of using standard python argument parsing for convenience.
+
+Once accurately specified, run the following command from the parent directory as: 
+
+```python src/occlude.py```
+
+# Comparison and Analysis of Methods
+
 Four metrics are considered while judging the applicability of methods in this scenario:
 * Speed (what is the total time needed to operate on one frame?)
 * Artifacts (can a reasonably perceptible human tell between an occluded stream and an original background stream?)
