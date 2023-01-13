@@ -197,3 +197,6 @@ def occlude_yolo(det:torch.Tensor,
     mask_out = cv2.cvtColor(mask_out, cv2.COLOR_GRAY2BGR)
 
     return {'string': s, 'mask': mask_out, 'background image': background_img, 'background update': background_update, 'age array': age_array}
+
+def occlude_histogram():
+    pass

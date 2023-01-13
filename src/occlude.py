@@ -11,7 +11,7 @@ import re
 from occlusion_methods import occlude_welford, occlude_pixel_history, occlude_yolo
 from yolopredictor import YoloPredictor
 
-def occlude(source:str):
+def occlude(source:str, occlusion_mechanism:str, PATH_TO_YOLO:str, weights:str='yolov7.pt') -> None:
 
 	view_img = True 
 	save_img = True
@@ -21,7 +21,6 @@ def occlude(source:str):
 	# Output save_path specifications
 
 	save_path = Path('runs/occlude/exp')
-	PATH_TO_YOLO = '/Users/suprateembanerjee/Python Projects/Teleport/Occlude/YOLO/yolov7-main'
 
 	if not save_path.exists():
 		save_dir = save_path #Path(str(save_path))
@@ -41,13 +40,8 @@ def occlude(source:str):
 	history_array = None
 	timeout = 30
 
-	occlusion_mechanism = ['yolo',
-							'per pixel history 200',
-							'welford',
-							'welford + erode + dilate'][1] 
-
 	if occlusion_mechanism == 'yolo':
-		predictor = YoloPredictor(path_to_yolo=PATH_TO_YOLO, weights='yolov7.pt')
+		predictor = YoloPredictor(path_to_yolo=PATH_TO_YOLO, weights=weights)
 
 	t0 = time.time()
 	
@@ -218,4 +212,17 @@ def occlude(source:str):
 	cap.release()
 
 if __name__=='__main__':
-	occlude('res/outdoor.mp4') # 'oslo.mp4' 'outdoor.mp4'
+
+	file = ['outdoor.mp4', 
+			'oslo.mp4'][0]
+	occlusion_mechanism = ['yolo',
+						'per pixel history 200',
+						'welford',
+						'welford + erode + dilate'][2]
+
+	PATH_TO_YOLO = '/Users/suprateembanerjee/Python Projects/Teleport/Occlude/YOLO/yolov7-main'
+	weights=['yolov7.pt',
+			 'yolov7-w6.pt',
+			 'yolov7x.pt'][0]
+			 
+	occlude(f'res/{file}', occlusion_mechanism, PATH_TO_YOLO, weights)
