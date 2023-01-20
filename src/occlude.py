@@ -59,6 +59,9 @@ def occlude(source:str, occlusion_mechanism:str, PATH_TO_YOLO:str, weights:str='
 			background_img = frame.copy()
 			age_array = np.zeros(frame.shape[:2])
 
+		if localizer == 'yolo':
+			det, img, timestamps = predictor.predict(frame)
+
 		age_array += 1.
 		t1 = t2 = t3 = t4 = t5 = t6 = t7 = t8 = time.time()
 		mask = np.ones_like(age_array)
@@ -70,7 +73,7 @@ def occlude(source:str, occlusion_mechanism:str, PATH_TO_YOLO:str, weights:str='
 
 			display_windows = ['original', 'detection', 'background_img', 'background_update']
 
-			det, img, timestamps = predictor.predict(frame)
+			# det, img, timestamps = predictor.predict(frame)
 			t1 = timestamps['t1']
 			t2 = timestamps['t2']
 			t3 = timestamps['t3']
@@ -82,17 +85,18 @@ def occlude(source:str, occlusion_mechanism:str, PATH_TO_YOLO:str, weights:str='
 
 			display_windows = ['original', 'mask', 'background_img', 'out_img']
 
-			det, img, timestamps = predictor.predict(frame)
 			t1 = timestamps['t1']
 			t2 = timestamps['t2']
 			t3 = timestamps['t3']
 
 			mask_local, s = mask_yolo(det, s, img, predictor.names, predictor.colors, frame, predictor.funcs)
-			# print('91: mask_local\n',mask_local[:5,:5])
+			
+			age_array *= np.logical_not(mask_local)
+
+			mask_local_aged = np.logical_not((age_array > 20).astype(np.uint8) * np.logical_not(mask_local))
 
 			occlude_out = occlude_welford(history_array, image, background_img)
 			history_array, mask_background, background_img, _, timestamps = occlude_out.values()
-			# print('95: mask_background\n',mask_background[:5,:5])
 
 			t4 = timestamps['t4']
 			t5 = timestamps['t5']
@@ -100,21 +104,14 @@ def occlude(source:str, occlusion_mechanism:str, PATH_TO_YOLO:str, weights:str='
 			t7 = timestamps['t7']
 			t8 = timestamps['t8']
 
-			mask_out = np.logical_not(mask_local) + (mask_local * mask_background)
-
-			# print('105: mask_out\n',mask_out[:5,:5])
-			mask_out[0][0] = 0.
-			# print('107: mask_out min/max \n',mask_out.max(), mask_out.min())
+			mask_out = np.logical_not(mask_local_aged) + (mask_local_aged * mask_background)
+			mask_out[0][0] = 0. # Done to enable proper normalization
 
 			out_img = background_img.copy()
 			out_img[np.nonzero(mask_out)] = image[np.nonzero(mask_out)]
 
 			mask_out = cv2.normalize(mask_out, None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
 			mask_out = cv2.cvtColor(mask_out, cv2.COLOR_GRAY2BGR)
-			# print('113: mask_out min/max \n',mask_out.max(), mask_out.min())
-
-			# print('115: mask_out shape:',mask_out.shape)
-			# print('116: mask_out\n',mask_out[:5,:5])
 			
 
 		elif occlusion_mechanism == 'per pixel history 200':

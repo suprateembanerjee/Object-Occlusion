@@ -169,7 +169,6 @@ def occlude_yolo(det:torch.Tensor,
             
             # Add bbox to image
             if names[int(cls)] == 'person':
-                # Reset Age of pixels
                 mask[max(0, y1 - margin) : min(frame.shape[0], y2 + margin), max(0, x1 - margin) : min(frame.shape[1], x2 + margin)] = 0.
 
                 label = f'{names[int(cls)]} {conf:.2f}'
@@ -180,7 +179,9 @@ def occlude_yolo(det:torch.Tensor,
                 if np.any(mask[y1:y2,x1:x2], where=[0.]):
                     mask[max(0, y1 - margin) : min(frame.shape[0], y2 + margin), max(0, x1 - margin) : min(frame.shape[1], x2 + margin)] = 0.
 
+        # Reset Age of pixels
         age_array *= mask
+        
         background_update = np.tile((age_array > 20).astype(np.uint8), (3, 1, 1)).transpose(1,2,0) * image
         mask = np.sum(background_update, axis=2)
         background_img[np.nonzero(mask)] = background_update[np.nonzero(mask)]

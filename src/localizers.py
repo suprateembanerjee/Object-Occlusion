@@ -31,7 +31,7 @@ def mask_yolo(det:torch.Tensor,
 
 
     image = frame.copy()
-    mask = np.zeros(frame.shape[:-1], dtype=np.uint8,) #np.full(shape=image.shape, fill_value=255, dtype=np.uint8) #np.ones_like(frame)
+    mask = np.zeros(frame.shape[:-1], dtype=np.uint8) #np.full(shape=image.shape, fill_value=255, dtype=np.uint8) #np.ones_like(frame)
 
     if len(det):
         # Rescale boxes from img_size to frame size
@@ -46,7 +46,7 @@ def mask_yolo(det:torch.Tensor,
         for x1, y1, x2, y2, conf, cls in det:
 
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            margin = 10
+            margin = 20
             
             if names[int(cls)] == 'person':
                 # Reset Age of pixels
