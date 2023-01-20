@@ -127,8 +127,10 @@ def occlude(source:str, occlusion_mechanism:str, PATH_TO_YOLO:str, weights:str='
 			t8 = timestamps['t8']
 			timeout -= 1
 
+			# print(mask_out.shape)
+
 			mask_out = cv2.normalize(mask_out, None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
-			mask_out = cv2.cvtColor(mask_out, cv2.COLOR_GRAY2BGR)
+			# mask_out = cv2.cvtColor(mask_out, cv2.COLOR_GRAY2BGR)
 
 		elif occlusion_mechanism == 'welford':
 
@@ -287,7 +289,7 @@ if __name__=='__main__':
 						'per pixel history 200',
 						'welford',
 						'welford + erode + dilate',
-						'multimodal clustering'][1]
+						'multimodal clustering'][0]
 
 	PATH_TO_YOLO = '/Users/suprateembanerjee/Python Projects/Teleport/Occlude/YOLO/yolov7-main'
 	weights=['yolov7.pt',
